@@ -1,0 +1,21 @@
+[project]
+name = "chat-server"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Your Name",email = "you@example.com"}
+]
+requires-python = "~3.12"
+dependencies = [
+    "mnemonic (>=0.21,<0.22)",
+    "ecdsa (>=0.19.1,<0.20.0)",
+    "cryptography (>=46.0.5,<47.0.0)",
+    "redis (>=7.2.1,<8.0.0)",
+    "pydantic (>=2.12.5,<3.0.0)",
+    "pydantic-settings (>=2.13.1,<3.0.0)",
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
