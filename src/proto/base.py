@@ -1,13 +1,14 @@
-from dataclasses import dataclass
-from typing import Any, get_type_hints
+from enum import IntEnum
+from typing import Any, ClassVar, Protocol, get_type_hints
 import uuid
 
 
 def var_to_bytes(var: Any, type_: type[Any]) -> bytes:
-    if not isinstance(var, type_):
-        raise TypeError(f"Expected type {type_}, got {type(var)}")
-
-    if type_ is int:
+    if isinstance(var, IntEnum) or (
+        isinstance(type_, type) and issubclass(type_, IntEnum)
+    ):
+        return var_to_bytes(int(var), int)
+    elif type_ is int:
         data_length = (var.bit_length() + 7) // 8 or 1
         len_bytes = data_length.to_bytes(1, byteorder="big")
         data = var.to_bytes(data_length, byteorder="big")
@@ -28,6 +29,9 @@ def var_to_bytes(var: Any, type_: type[Any]) -> bytes:
 
 
 def bytes_to_var(data: bytes, type_: type[Any]) -> Any:
+    if isinstance(type_, type) and issubclass(type_, IntEnum):
+        val = int.from_bytes(data, byteorder="big")
+        return type_(val)
     if type_ is int:
         return int.from_bytes(data, byteorder="big")
     elif type_ is str:
@@ -40,23 +44,36 @@ def bytes_to_var(data: bytes, type_: type[Any]) -> Any:
         raise TypeError(f"Unsupported type: {type_}")
 
 
-class BaseProtocol:
-    def __init_subclass__(cls, version: int) -> None:
-        cls.version = version
+class RequestProto(Protocol):
+    type: int
+    request_id: uuid.UUID
 
-        cls.hints = list(sorted(get_type_hints(cls).items(), key=lambda item: item[0]))
+    def to_bytes(self) -> bytes: ...
+
+
+class BasePackage:
+    type: ClassVar[int]
+
+    def __init_subclass__(cls, type: int) -> None:
+        cls.type = type
+
+        cls.hints = [
+            i
+            for i in sorted(get_type_hints(cls).items(), key=lambda item: item[0])
+            if i[0] != "type"
+        ]
 
         super().__init_subclass__()
 
     def to_bytes(self) -> bytes:
-        data = var_to_bytes(self.version, int)
+        data = var_to_bytes(self.type, int)
         for field_name, field_type in self.hints:
             value = getattr(self, field_name)
             data += var_to_bytes(value, field_type)
         return data
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> "BaseProtocol":
+    def from_bytes(cls, data: bytes) -> "BasePackage":
         i = 0
 
         data_chunks: list[bytes] = []
@@ -67,19 +84,12 @@ class BaseProtocol:
             if i >= len(data):
                 break
 
-        VERSION = int.from_bytes(data_chunks[0], byteorder="big")
-        if VERSION != cls.version:
-            raise ValueError(f"Expected version {cls.version}, got {VERSION}")
+        TYPE = int.from_bytes(data_chunks[0], byteorder="big")
+        if TYPE != cls.type:
+            raise ValueError(f"Expected type {cls.type}, got {TYPE}")
 
         kwargs = {}
         for (field_name, field_type), chunk in zip(cls.hints, data_chunks[1:]):
             kwargs[field_name] = bytes_to_var(chunk, field_type)
 
         return cls(**kwargs)
-
-
-@dataclass
-class TestData(BaseProtocol, version=1):
-    a: int
-    b: str
-    u: uuid.UUID
