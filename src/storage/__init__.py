@@ -1,5 +1,5 @@
-from .connection import RedisConnection
-from .dao import RedisDAO
+from .connection import StorageConnection
+from .dao import DAO
 
 
-__all__ = ["RedisConnection", "RedisDAO"]
+__all__ = ["StorageConnection", "DAO"]

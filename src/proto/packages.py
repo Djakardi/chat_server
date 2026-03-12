@@ -1,32 +1,33 @@
 from dataclasses import dataclass
 from enum import IntEnum
-import uuid
 
-from .base import BasePackage, RequestProto
+from .base import BasePackage
 
 
 class RequestType(IntEnum):
-    MESSAGE_V1 = 1
-    PING_V1 = 2
+    MESSAGE_REQUEST_V1 = 1
+    MESSAGE_RESPONSE_V1 = 2
+    PING_V1 = 3
 
 
 @dataclass(kw_only=True, frozen=True)
-class MessageRequest(BasePackage, RequestProto, type=RequestType.MESSAGE_V1):
-    request_id: uuid.UUID
-    from_addr: str
-    to_addr: str
-    timestamp: int
-    payload: str
-    signature: str
+class MessageRequest(BasePackage, type=RequestType.MESSAGE_REQUEST_V1):
+    to_addr: bytes
+    payload: bytes
 
 
 @dataclass(kw_only=True, frozen=True)
-class PingRequest(BasePackage, RequestProto, type=RequestType.PING_V1):
-    request_id: uuid.UUID
-    timestamp: int
+class MessageResponse(BasePackage, type=RequestType.MESSAGE_RESPONSE_V1):
+    is_delivered: bool
+
+
+@dataclass(kw_only=True, frozen=True)
+class PingRequest(BasePackage, type=RequestType.PING_V1):
+    pass
 
 
 TYPES_TO_CLASSES: dict[int, type[BasePackage]] = {
-    RequestType.MESSAGE_V1: MessageRequest,
+    RequestType.MESSAGE_REQUEST_V1: MessageRequest,
+    RequestType.MESSAGE_RESPONSE_V1: MessageResponse,
     RequestType.PING_V1: PingRequest,
 }

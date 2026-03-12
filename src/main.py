@@ -1,10 +1,10 @@
-from server import Server
+import asyncio
+import logging
 
+from server import run_server
 
-def main():
-    server = Server()
-    server.run_loop()
+logging.basicConfig(level=logging.INFO)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(run_server())

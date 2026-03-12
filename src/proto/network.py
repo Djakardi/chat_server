@@ -1,6 +1,6 @@
 import asyncio
 
-from .base import RequestProto, BasePackage
+from .base import BasePackage, read_chunk
 from .packages import TYPES_TO_CLASSES
 
 
@@ -8,17 +8,11 @@ def _read_package_type(data: bytes) -> int:
     if not data:
         raise ValueError("Empty data when trying to read package type")
 
-    field_len = data[0]
-    end = 1 + field_len
-    if len(data) < end:
-        raise ValueError(
-            f"Data too short for declared type length {field_len}: only {len(data)} bytes"
-        )
-
-    return int.from_bytes(data[1:end], byteorder="big")
+    type_bytes, _ = read_chunk(data)
+    return int.from_bytes(type_bytes, byteorder="big")
 
 
-async def send_package(package: RequestProto, writer: asyncio.StreamWriter) -> None:
+async def send_package(package: BasePackage, writer: asyncio.StreamWriter) -> None:
     data = package.to_bytes()
     data_length = len(data).to_bytes(4, byteorder="big")
 

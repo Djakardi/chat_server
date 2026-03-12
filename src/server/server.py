@@ -1,55 +1,57 @@
 import asyncio
-import time
+import logging
 
-from proto import BasePackage
-from proto.network import receive_package, send_package
-from proto.packages import PingRequest
+from proto import Cryptography, HandlerType
 
+from .client import ServerClient
 
-class ServerClient:
-    def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
-        self.reader = reader
-        self.writer = writer
-
-    async def process_request(self, packet: BasePackage):
-        if isinstance(packet, PingRequest):
-            response = PingRequest(
-                request_id=packet.request_id, timestamp=time.time_ns()
-            )
-            await send_package(response, self.writer)
-
-    async def loop_read(self):
-        while True:
-            try:
-                package = await receive_package(self.reader)
-                await self.process_request(package)
-
-            except asyncio.IncompleteReadError:
-                print("Client disconnected")
-                break
+logger = logging.getLogger(__name__)
 
 
 class Server:
-    def __init__(self, host: str = "localhost", port: int = 8080):
+    def __init__(self, host: str, port: int, mnemonic: str, handler: HandlerType):
         self.host = host
         self.port = port
-        self.server: asyncio.AbstractServer | None = None
-        self.clients: list[ServerClient] = []
+        self.crypto = Cryptography(mnemonic)
+
+        self._handler = handler
+        self._server: asyncio.AbstractServer | None = None
+        self._clients: dict[bytes, ServerClient] = {}
 
     async def handle_client(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ):
-        client = ServerClient(reader, writer)
-        self.clients.append(client)
-        await client.loop_read()
+        logger.info("New client connected")
+        client = ServerClient(
+            reader=reader,
+            writer=writer,
+            crypto=self.crypto,
+            handler=self._handler,
+        )
+        client._create_loop(client._ping_client())
+        try:
+            await client.wait_loop()
+        finally:
+            client.disconnect()
+            for public_key in client.remote_public_keys:
+                self._clients.pop(public_key, None)
+            client.remote_public_keys.clear()
+            logger.info("Client disconnected")
+
+    def register_client_pub_keys(self, client: ServerClient):
+        for public_key in client.remote_public_keys:
+            self._clients[public_key] = client
+
+    def get_client_by_pub_key(self, public_key: bytes) -> ServerClient | None:
+        return self._clients.get(public_key)
 
     async def serve(self):
-        self.server = await asyncio.start_server(
+        self._server = await asyncio.start_server(
             self.handle_client, host=self.host, port=self.port
         )
-        async with self.server:
-            print(f"Server started on {self.host}:{self.port}")
-            await self.server.serve_forever()
+        async with self._server:
+            logger.info(f"Server started on {self.host}:{self.port}")
+            await self._server.serve_forever()
 
     def run_loop(self):
         asyncio.run(self.serve())

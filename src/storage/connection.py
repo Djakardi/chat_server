@@ -1,7 +1,7 @@
 from redis.asyncio import ConnectionPool, Redis
 
 
-class RedisConnection:
+class StorageConnection:
     def __init__(self, url: str):
         self.connection_pool = ConnectionPool.from_url(url)
 
