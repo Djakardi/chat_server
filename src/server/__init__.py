@@ -12,7 +12,7 @@ async def run_server(settings: Settings | None = None):
     storage_conn = StorageConnection(settings.REDIS_URL)
     server = Server(
         host=settings.HOST,
-        port=settings.PORT,
+        port_plaintext=settings.PORT,
         mnemonic=settings.MNEMONIC_SERVER,
         handler=server_dp,
     )

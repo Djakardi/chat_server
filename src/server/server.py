@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import ssl
 
 from proto import Cryptography, HandlerType
 
@@ -9,14 +10,44 @@ logger = logging.getLogger(__name__)
 
 
 class Server:
-    def __init__(self, host: str, port: int, mnemonic: str, handler: HandlerType):
+    def __init__(
+        self,
+        host: str,
+        mnemonic: str,
+        handler: HandlerType,
+        *,
+        port_plaintext: int | None = None,
+        port_ssl: int | None = None,
+        ssl_ctx: ssl.SSLContext | None = None,
+        run_only_ssl: bool = False,
+        run_only_plaintext: bool = False,
+    ):
+        if run_only_ssl and run_only_plaintext:
+            raise ValueError("Cannot run with both SSL and plaintext only")
+        if run_only_ssl and ssl_ctx is None:
+            raise ValueError("SSL context must be provided when run_only_ssl is True")
+
+        if not run_only_ssl and port_plaintext is None:
+            raise ValueError(
+                "Port for plaintext must be provided when not running only SSL"
+            )
+        if not run_only_plaintext and port_ssl is None:
+            raise ValueError(
+                "Port for SSL must be provided when not running only plaintext"
+            )
+
         self.host = host
-        self.port = port
+        self.port_ssl = port_ssl
+        self.port_plaintext = port_plaintext
         self.crypto = Cryptography(mnemonic)
 
         self._handler = handler
-        self._server: asyncio.AbstractServer | None = None
+        self._servers: list[asyncio.AbstractServer] = []
         self._clients: dict[bytes, ServerClient] = {}
+
+        self.ssl_ctx = ssl_ctx
+        self.run_plaintext = not run_only_ssl
+        self.run_ssl = not run_only_plaintext
 
     async def handle_client(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -46,12 +77,20 @@ class Server:
         return self._clients.get(public_key)
 
     async def serve(self):
-        self._server = await asyncio.start_server(
-            self.handle_client, host=self.host, port=self.port
-        )
-        async with self._server:
-            logger.info(f"Server started on {self.host}:{self.port}")
-            await self._server.serve_forever()
+        if self.run_plaintext:
+            server = await asyncio.start_server(
+                self.handle_client, self.host, self.port_plaintext
+            )
+            self._servers.append(server)
+            logger.info(
+                f"Server started on {self.host}:{self.port_plaintext} (plaintext)"
+            )
+        if self.run_ssl and self.ssl_ctx:
+            server_ssl = await asyncio.start_server(
+                self.handle_client, self.host, self.port_ssl, ssl=self.ssl_ctx
+            )
+            self._servers.append(server_ssl)
+            logger.info(f"Server started on {self.host}:{self.port_ssl} (SSL)")
 
     def run_loop(self):
         asyncio.run(self.serve())
