@@ -41,8 +41,9 @@ ENV PYTHONUNBUFFERED=1
 ENV HOST=localhost
 ENV PORT=8080
 ENV PATH="/app/.venv/bin:$PATH"
+ENV PYTHONPATH="/app/src"
 
 EXPOSE 8080
 
 # Запуск сервера через Doppler для управления переменными окружения
-CMD ["doppler", "run", "--", "python", "-m", "src.main"]
+CMD ["doppler", "run", "--", "python", "-m", "main"]
