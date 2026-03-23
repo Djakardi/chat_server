@@ -15,6 +15,7 @@ async def run_server(settings: Settings | None = None):
         port_plaintext=settings.PORT,
         mnemonic=settings.MNEMONIC_SERVER,
         handler=server_dp,
+        run_only_plaintext=True,
     )
     server_dp.context["server"] = server
     server_dp.context["storage_conn"] = storage_conn
