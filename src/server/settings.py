@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     PORT_PLAINTEXT: int | None = None
     PORT_SSL: int | None = None
     RUN_ONLY_SSL: bool = False
-    RUN_ONLY_PLAINTEXT: bool = True
+    RUN_ONLY_PLAINTEXT: bool = False
     SSL_CERT_BASE64: str | None = None
     SSL_KEY_BASE64: str | None = None
     SSL_CERT_PATH: str | None = None
