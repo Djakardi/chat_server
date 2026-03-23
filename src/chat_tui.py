@@ -31,8 +31,8 @@ from proto.packages import PingRequest, MessageRequest, MessageResponse
 
 logging.disable(logging.CRITICAL)  # не загрязняем TUI логами
 
-HOST = os.getenv("HOST", "localhost")
-PORT = int(os.getenv("PORT", "8080"))
+HOST = os.getenv("HOST", "anagimchat.tech")
+PORT = int(os.getenv("PORT", "443"))
 MNEMONIC = os.getenv("MNEMONIC", "")
 PEER_ADDR = os.getenv("PEER_ADDR", "")
 
