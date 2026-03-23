@@ -46,4 +46,4 @@ ENV PYTHONPATH="/app/src"
 EXPOSE 8080
 
 # Запуск сервера через Doppler для управления переменными окружения
-CMD ["doppler", "run", "--", "python", "-m", "main"]
+CMD ["doppler", "run", "--", "python", "src/main.py"]
