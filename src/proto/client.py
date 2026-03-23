@@ -136,7 +136,12 @@ class BaseProtoClient(ABC):
                     future.set_result(package)
 
             except asyncio.IncompleteReadError:
-                logger.info("Server disconnected")
+                peer = None
+                try:
+                    peer = self._writer.get_extra_info("peername")
+                except Exception:
+                    pass
+                logger.info("Remote peer %s disconnected (IncompleteRead)", peer)
                 disconnect_error = ConnectionError("Connection closed by peer")
                 break
 
@@ -146,7 +151,12 @@ class BaseProtoClient(ABC):
                 break
 
             except (ValueError, TypeError, UnicodeDecodeError) as exc:
-                logger.warning("Invalid package received: %s", exc)
+                peer = None
+                try:
+                    peer = self._writer.get_extra_info("peername")
+                except Exception:
+                    pass
+                logger.warning("Invalid package received from %s: %s", peer, exc)
                 disconnect_error = ConnectionError("Invalid package received")
                 break
 
@@ -155,6 +165,7 @@ class BaseProtoClient(ABC):
                 break
 
         if disconnect_error is not None:
+            logger.debug("Failing awaited requests with: %s", disconnect_error)
             self._fail_awaited_requests(disconnect_error)
 
         for loop in self._loops:

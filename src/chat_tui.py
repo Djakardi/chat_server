@@ -14,6 +14,7 @@ TUI чат-клиент.
 import asyncio
 import logging
 import os
+import ssl
 import shutil
 import subprocess  # nosec B404
 import sys
@@ -31,10 +32,12 @@ from proto.packages import PingRequest, MessageRequest, MessageResponse
 
 logging.disable(logging.CRITICAL)  # не загрязняем TUI логами
 
-HOST = os.getenv("HOST", "anagimchat.tech")
+HOST = os.getenv("HOST", "aganimchat.tech")
 PORT = int(os.getenv("PORT", "443"))
 MNEMONIC = os.getenv("MNEMONIC", "")
 PEER_ADDR = os.getenv("PEER_ADDR", "")
+
+print(HOST, PORT)
 
 
 # ── dispatcher для входящих сообщений ────────────────────────────────────────
@@ -209,7 +212,28 @@ class ChatApp(App):
         log = self.query_one("#log", RichLog)
         self.post_message(StatusUpdate("Подключение..."))
         try:
-            client = await Client.connect(host=HOST, port=PORT, mnemonic=self._mnemonic)
+            # Decide whether to use SSL: default ports 443 and 8443 are treated as SSL.
+            use_ssl_env = os.getenv("USE_SSL", "").lower() in ("1", "true", "yes")
+            use_ssl = use_ssl_env or PORT in (443, 8443)
+
+            ssl_ctx = None
+            if use_ssl:
+                # Allow opting out of verification for self-signed certs during testing
+                insecure = os.getenv("INSECURE_SSL", "").lower() in ("1", "true", "yes")
+                if insecure:
+                    ssl_ctx = ssl.create_default_context()
+                    ssl_ctx.check_hostname = False
+                    ssl_ctx.verify_mode = ssl.CERT_NONE
+                else:
+                    ssl_ctx = ssl.create_default_context()
+
+            client = await Client.connect(
+                host=HOST,
+                port=PORT,
+                mnemonic=self._mnemonic,
+                ssl_ctx=ssl_ctx,
+                server_hostname=HOST,
+            )
             client.setup_handler(make_dispatcher(self))
             self._client = client
         except Exception as e:

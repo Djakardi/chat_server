@@ -52,7 +52,12 @@ class Server:
     async def handle_client(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ):
-        logger.info("New client connected")
+        peer = writer.get_extra_info("peername")
+        sockname = writer.get_extra_info("sockname")
+        ssl_obj = writer.get_extra_info("ssl_object")
+        logger.info(
+            "New client connected from %s -> %s (ssl=%s)", peer, sockname, bool(ssl_obj)
+        )
         client = ServerClient(
             reader=reader,
             writer=writer,
@@ -67,7 +72,7 @@ class Server:
             for public_key in client.remote_public_keys:
                 self._clients.pop(public_key, None)
             client.remote_public_keys.clear()
-            logger.info("Client disconnected")
+            logger.info("Client disconnected %s", peer)
 
     def register_client_pub_keys(self, client: ServerClient):
         for public_key in client.remote_public_keys:

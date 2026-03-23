@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import ssl
 
 from proto import BaseProtoClient, Cryptography
 from proto.packages import PingRequest, MessageRequest, MessageResponse
@@ -21,8 +22,24 @@ class Client(BaseProtoClient):
             await asyncio.sleep(5)
 
     @classmethod
-    async def connect(cls, host: str, port: int, mnemonic: str):
-        reader, writer = await asyncio.open_connection(host, port)
+    async def connect(
+        cls,
+        host: str,
+        port: int,
+        mnemonic: str,
+        *,
+        ssl_ctx: ssl.SSLContext | None = None,
+        server_hostname: str | None = None,
+    ):
+        # Pass ssl context to asyncio.open_connection when provided.
+        # If ssl_ctx is None, connection will be plaintext.
+        if ssl_ctx is not None:
+            reader, writer = await asyncio.open_connection(
+                host, port, ssl=ssl_ctx, server_hostname=server_hostname
+            )
+        else:
+            reader, writer = await asyncio.open_connection(host, port)
+
         client = cls(
             reader=reader,
             writer=writer,
