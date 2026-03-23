@@ -39,11 +39,11 @@ COPY pyproject.toml ./
 # Переменные окружения по умолчанию для сервера
 ENV PYTHONUNBUFFERED=1
 ENV HOST=localhost
-ENV PORT_SSL=8080
+ENV PORT_SSL=8000
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH="/app/src"
 
-EXPOSE 8080
+EXPOSE 8000
 
 # Запуск сервера через Doppler для управления переменными окружения
 CMD ["doppler", "run", "--", "python", "src/main.py"]
