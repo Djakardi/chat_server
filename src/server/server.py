@@ -92,5 +92,9 @@ class Server:
             self._servers.append(server_ssl)
             logger.info(f"Server started on {self.host}:{self.port_ssl} (SSL)")
 
+        async with asyncio.TaskGroup() as tg:
+            for server in self._servers:
+                tg.create_task(server.serve_forever())
+
     def run_loop(self):
         asyncio.run(self.serve())
