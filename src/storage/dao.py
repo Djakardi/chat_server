@@ -1,4 +1,7 @@
+import json
+
 from .connection import StorageConnection
+from .models import ServerInfo
 
 
 MESSAGES_TTL = 7 * 24 * 3600  # 7 days
@@ -38,3 +41,20 @@ class DAO:
 
     async def clear_messages_for_addr(self, to_addr: str):
         await self.session.delete(f"messages:{to_addr}")
+
+    async def append_server_info(self, server_info: ServerInfo):
+        data = server_info.__dict__.copy()
+        data["server_public_key"] = data["server_public_key"].hex()
+        await self.session.sadd("servers_info", json.dumps(data))
+
+    async def get_all_server_info(self) -> list[ServerInfo]:
+        server_info_jsons = await self.session.smembers("servers_info")
+        infos = []
+        for info_json in server_info_jsons:
+            data = json.loads(info_json)
+            data["server_public_key"] = bytes.fromhex(data["server_public_key"])
+            infos.append(ServerInfo(**data))
+        return infos
+
+    async def clear_all(self):
+        await self.session.flushdb()

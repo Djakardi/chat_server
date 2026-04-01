@@ -1,6 +1,8 @@
 import asyncio
 import logging
+import signal
 import ssl
+from typing import Awaitable, Callable
 
 from proto import Cryptography, HandlerType
 
@@ -13,51 +15,51 @@ class Server:
     def __init__(
         self,
         host: str,
+        port: int,
         mnemonic: str,
         handler: HandlerType,
-        *,
-        port_plaintext: int | None = None,
-        port_ssl: int | None = None,
-        ssl_ctx: ssl.SSLContext | None = None,
-        run_only_ssl: bool = False,
-        run_only_plaintext: bool = False,
+        ssl_ctx: ssl.SSLContext,
+        on_startup: Callable[[], Awaitable[None]] | None = None,
+        on_shutdown: Callable[[], Awaitable[None]] | None = None,
     ):
-        if run_only_ssl and run_only_plaintext:
-            raise ValueError("Cannot run with both SSL and plaintext only")
-        if run_only_ssl and ssl_ctx is None:
-            raise ValueError("SSL context must be provided when run_only_ssl is True")
-
-        if not run_only_ssl and port_plaintext is None:
-            raise ValueError(
-                "Port for plaintext must be provided when not running only SSL"
-            )
-        if not run_only_plaintext and port_ssl is None:
-            raise ValueError(
-                "Port for SSL must be provided when not running only plaintext"
-            )
-
         self.host = host
-        self.port_ssl = port_ssl
-        self.port_plaintext = port_plaintext
+        self.port = port
         self.crypto = Cryptography(mnemonic)
 
         self._handler = handler
-        self._servers: list[asyncio.AbstractServer] = []
         self._clients: dict[bytes, ServerClient] = {}
+        self._server_clients: dict[bytes, ServerClient] = {}
 
         self.ssl_ctx = ssl_ctx
-        self.run_plaintext = not run_only_ssl
-        self.run_ssl = not run_only_plaintext
+        self.on_startup = on_startup
+        self.on_shutdown = on_shutdown
+
+    async def connect_to_server(
+        self, host: str, port: int, ssl_ctx: ssl.SSLContext | None = None
+    ) -> ServerClient:
+        if ssl_ctx is not None:
+            reader, writer = await asyncio.open_connection(host, port, ssl=ssl_ctx)
+        else:
+            reader, writer = await asyncio.open_connection(host, port)
+        peer = writer.get_extra_info("peername")
+        sockname = writer.get_extra_info("sockname")
+        logger.info("Connected to server %s -> %s", sockname, peer)
+
+        client = ServerClient(
+            reader=reader,
+            writer=writer,
+            crypto=self.crypto,
+            handler=self._handler,
+        )
+        client._create_loop(client._ping_client())
+        return client
 
     async def handle_client(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ):
         peer = writer.get_extra_info("peername")
         sockname = writer.get_extra_info("sockname")
-        ssl_obj = writer.get_extra_info("ssl_object")
-        logger.info(
-            "New client connected from %s -> %s (ssl=%s)", peer, sockname, bool(ssl_obj)
-        )
+        logger.info("New client connected from %s -> %s", peer, sockname)
         client = ServerClient(
             reader=reader,
             writer=writer,
@@ -82,24 +84,31 @@ class Server:
         return self._clients.get(public_key)
 
     async def serve(self):
-        if self.run_plaintext:
-            server = await asyncio.start_server(
-                self.handle_client, self.host, self.port_plaintext
-            )
-            self._servers.append(server)
-            logger.info(
-                f"Server started on {self.host}:{self.port_plaintext} (plaintext)"
-            )
-        if self.run_ssl and self.ssl_ctx:
-            server_ssl = await asyncio.start_server(
-                self.handle_client, self.host, self.port_ssl, ssl=self.ssl_ctx
-            )
-            self._servers.append(server_ssl)
-            logger.info(f"Server started on {self.host}:{self.port_ssl} (SSL)")
+        loop = asyncio.get_running_loop()
 
-        async with asyncio.TaskGroup() as tg:
-            for server in self._servers:
-                tg.create_task(server.serve_forever())
+        # Call on_startup if provided
+        if self.on_startup:
+            await self.on_startup()
+
+        server = await asyncio.start_server(
+            self.handle_client, self.host, self.port, ssl=self.ssl_ctx
+        )
+        logger.info(f"Server started on {self.host}:{self.port}")
+
+        # Setup signal handlers for graceful shutdown
+        def shutdown():
+            logger.info("Shutting down server...")
+            server.close()
+
+        loop.add_signal_handler(signal.SIGINT, shutdown)
+        loop.add_signal_handler(signal.SIGTERM, shutdown)
+
+        async with server:
+            await server.serve_forever()
+
+        # Call on_shutdown if provided
+        if self.on_shutdown:
+            await self.on_shutdown()
 
     def run_loop(self):
         asyncio.run(self.serve())
